@@ -1221,52 +1221,29 @@ function goHome(){stopRecordingIfActive();document.getElementById('home-screen')
 function setMode(mode){currentMode=mode;document.getElementById('mode-listen').className=`mode-btn ${mode==='listen'?'active':''}`;document.getElementById('mode-speak').className=`mode-btn ${mode==='speak'?'active':''}`;document.getElementById('listen-mode').style.display=mode==='listen'?'':'none';document.getElementById('speak-mode').style.display=mode==='speak'?'':'none';currentQIdx=0;sessionCorrect=0;sessionTotal=0;loadQuestion();}
 function loadQuestion(){if(!currentTopic)return;const items=currentTopic.items;if(currentQIdx>=items.length){showComplete();return;}const item=items[currentQIdx];document.getElementById('study-progress').style.width=((currentQIdx)/items.length*100)+'%';document.getElementById('next-q-btn').style.display='none';if(currentMode==='listen'){document.getElementById('q-num').textContent=`문제 ${currentQIdx+1} / ${items.length}`;document.getElementById('q-text').textContent='🔊 버튼을 눌러 영어를 들어보세요';document.getElementById('q-sub').textContent='듣고 알맞은 뜻을 골라보세요';document.getElementById('listen-feedback').className='feedback';document.getElementById('listen-feedback').style.display='none';const sh=[...item.choices].sort(()=>Math.random()-0.5);const cd=document.getElementById('choices');cd.innerHTML='';sh.forEach(ch=>{const b=document.createElement('button');b.className='choice-btn';b.textContent=ch;b.onclick=()=>checkListenAnswer(b,ch,item);cd.appendChild(b);});}else{document.getElementById('sq-num').textContent=`문제 ${currentQIdx+1} / ${items.length}`;if(currentCourse==='opic'){document.getElementById('sq-text').textContent=item.ko;document.getElementById('sq-sub').innerHTML='<b>위 내용을 영어로 말해보세요!</b><br><span style="font-size:0.8em;color:var(--primary);">💡 Tip: 완벽하지 않아도 괜찮아요. 핵심 단어를 포함해서 말해보세요.</span>';}else{document.getElementById('sq-text').textContent=item.ko;document.getElementById('sq-sub').textContent='위 문장을 영어로 말해보세요!';}document.getElementById('stt-box').textContent='여기에 내가 말한 내용이 나타나요';document.getElementById('stt-box').className='stt-box';document.getElementById('speak-feedback').className='feedback';document.getElementById('speak-feedback').style.display='none';document.getElementById('speak-check-btn').disabled=true;document.getElementById('speak-check-btn').textContent='내 답변 확인하기';document.getElementById('speak-check-btn').onclick=()=>checkSpeaking();document.getElementById('playback-audio').style.display='none';document.getElementById('sfb-model').style.display='none';sttText='';}}
 function playQuestion(){if(!currentTopic)return;speakEN(currentTopic.items[currentQIdx].en);}
-let ttsVoices=[];
-let ttsUnlocked=false;
-function loadVoices(){
-    if(!window.speechSynthesis) return;
-    ttsVoices=window.speechSynthesis.getVoices();
-}
-if(window.speechSynthesis){
-    loadVoices();
-    window.speechSynthesis.onvoiceschanged=loadVoices;
-}
-function unlockTTS(){
-    if(ttsUnlocked||!window.speechSynthesis) return;
-    const u=new SpeechSynthesisUtterance('');
-    u.volume=0;
-    window.speechSynthesis.speak(u);
-    ttsUnlocked=true;
-    loadVoices();
-}
-document.addEventListener('touchstart',unlockTTS,{once:true});
-document.addEventListener('click',unlockTTS,{once:true});
-
 function speakEN(text){
-    if(!window.speechSynthesis){alert('이 브라우저는 음성을 지원하지 않습니다.');return;}
-    unlockTTS();
-    window.speechSynthesis.cancel();
-    const doSpeak=()=>{
-        const m=new SpeechSynthesisUtterance(text);
-        m.lang='en-US';m.rate=ttsRate;
-        if(ttsVoices.length===0) loadVoices();
-        const v=ttsVoices.find(v=>v.lang==='en-US')
-            ||ttsVoices.find(v=>v.lang.startsWith('en-'))
-            ||ttsVoices.find(v=>v.lang.startsWith('en'));
-        if(v) m.voice=v;
-        const b=document.getElementById('listen-play-btn');
-        if(b)b.classList.add('playing');
-        m.onend=()=>{clearInterval(wd);if(b)b.classList.remove('playing');};
-        m.onerror=(e)=>{clearInterval(wd);if(b)b.classList.remove('playing');
-            console.log('TTS error:',e);};
-        window.speechSynthesis.speak(m);
-        const wd=setInterval(()=>{
-            if(!window.speechSynthesis.speaking){clearInterval(wd);return;}
-            window.speechSynthesis.pause();
-            window.speechSynthesis.resume();
+    try{
+        var synth=window.speechSynthesis;
+        if(!synth) return;
+        synth.cancel();
+        var u=new SpeechSynthesisUtterance(text);
+        u.lang='en-US';
+        u.rate=ttsRate;
+        var voices=synth.getVoices();
+        for(var i=0;i<voices.length;i++){
+            if(voices[i].lang==='en-US'){u.voice=voices[i];break;}
+        }
+        var btn=document.getElementById('listen-play-btn');
+        if(btn) btn.classList.add('playing');
+        u.onend=function(){if(btn)btn.classList.remove('playing');};
+        u.onerror=function(){if(btn)btn.classList.remove('playing');};
+        synth.speak(u);
+        var timer=setInterval(function(){
+            if(!synth.speaking){clearInterval(timer);return;}
+            synth.pause();synth.resume();
         },5000);
-    };
-    setTimeout(doSpeak,50);
+        u.onend=function(){clearInterval(timer);if(btn)btn.classList.remove('playing');};
+    }catch(e){console.log('TTS:',e);}
 }
 function setSpeed(r,el){ttsRate=r;el.parentElement.querySelectorAll('.speed-btn').forEach(b=>b.classList.remove('active'));el.classList.add('active');}
 function checkListenAnswer(btn,chosen,item){document.querySelectorAll('#choices .choice-btn').forEach(b=>b.classList.add('disabled'));sessionTotal++;if(chosen===item.ko){btn.classList.add('correct');sessionCorrect++;addXP(10);showListenFeedback(true,item);}else{btn.classList.add('wrong');document.querySelectorAll('#choices .choice-btn').forEach(b=>{if(b.textContent===item.ko)b.classList.add('correct');});showListenFeedback(false,item);}if(!progress[currentTopic.id])progress[currentTopic.id]={};progress[currentTopic.id].listenDone=(progress[currentTopic.id].listenDone||0)+1;save();document.getElementById('next-q-btn').style.display='';setTimeout(()=>document.getElementById('listen-feedback').scrollIntoView({behavior:'smooth',block:'center'}),100);}
